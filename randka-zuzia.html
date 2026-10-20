@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mam pytanie… 💌</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+/* ====== KONFIGURACJA: zmień na swój unikalny temat ntfy ====== */
+:root{
+  --bg1:#ffd6e3; --bg2:#ff9ebb; --ink:#5a0f2b; --red:#e8164f; --soft:#fff5f8;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{
+  font-family:"Nunito",system-ui,sans-serif;color:var(--ink);
+  background:radial-gradient(circle at 30% 20%,var(--bg1),var(--bg2));
+  overflow:hidden;-webkit-tap-highlight-color:transparent;
+}
+canvas{position:fixed;inset:0;z-index:0;pointer-events:none}
+main{position:relative;z-index:1;height:100%;display:grid;place-items:center;padding:20px}
+.card{
+  background:rgba(255,245,248,.88);backdrop-filter:blur(6px);
+  border-radius:28px;padding:36px 28px;width:min(420px,100%);text-align:center;
+  box-shadow:0 20px 50px rgba(150,10,60,.25);
+}
+h1{font-family:"Caveat",cursive;font-size:clamp(2.6rem,10vw,3.6rem);line-height:1;color:var(--red)}
+.sub{margin-top:10px;font-size:1rem;opacity:.75}
+.btns{margin-top:28px;display:flex;gap:16px;justify-content:center}
+button{font:inherit;font-weight:800;border:0;cursor:pointer;border-radius:999px;padding:14px 34px;font-size:1.15rem}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+#yes{background:var(--red);color:#fff;box-shadow:0 8px 20px rgba(232,22,79,.4)}
+#yes:active{transform:scale(.96)}
+#no{background:#fff;color:var(--ink);border:2px solid var(--ink);transition:left .25s,top .25s;z-index:5}
+#no.run{position:fixed}
+.toast{
+  position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 20px);transform:translate(-50%,-120px);
+  background:var(--ink);color:#fff;padding:12px 22px;border-radius:999px;font-weight:800;z-index:10;
+  transition:transform .3s;white-space:nowrap
+}
+.toast.show{transform:translate(-50%,0)}
+.hidden{display:none!important}
+/* Kalendarz */
+.calhead{display:flex;align-items:center;justify-content:space-between;margin:18px 0 10px}
+.calhead b{font-size:1.1rem;text-transform:capitalize}
+.nav{background:none;padding:6px 12px;font-size:1.3rem;color:var(--red)}
+.nav:disabled{opacity:.25;cursor:default}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.dow{font-size:.75rem;opacity:.6;padding:4px 0}
+.day{padding:9px 0;border-radius:12px;font-size:.95rem;background:transparent;font-weight:700}
+.day:hover:not(:disabled){background:var(--bg1)}
+.day:disabled{opacity:.25;cursor:default}
+.day.sel{background:var(--red);color:#fff}
+.times{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:16px}
+.time{padding:8px 14px;font-size:.95rem;background:#fff;border:2px solid var(--bg2)}
+.time.sel{background:var(--red);border-color:var(--red);color:#fff}
+#confirm{margin-top:22px;background:var(--red);color:#fff;width:100%}
+#confirm:disabled{opacity:.4;cursor:default}
+.big{font-family:"Caveat",cursive;font-size:clamp(2.4rem,9vw,3.2rem);color:var(--red);line-height:1.1}
+.pop{animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+/* Balony-serduszka */
+.balloon{position:fixed;bottom:-180px;z-index:8;pointer-events:none;
+  animation:rise var(--d) cubic-bezier(.35,.05,.6,1) forwards;animation-delay:var(--dl)}
+.balloon .sw{animation:sway var(--sd) ease-in-out infinite alternate;transform-origin:50% 100%}
+.balloon svg{display:block;filter:drop-shadow(0 6px 8px rgba(120,0,40,.25))}
+@keyframes rise{to{transform:translateY(calc(-100vh - 260px))}}
+@keyframes sway{from{transform:rotate(-8deg) translateX(-12px)}to{transform:rotate(8deg) translateX(12px)}}
+@media (prefers-reduced-motion:reduce){.balloon .sw{animation:none}.pop{animation:none}#no{transition:none}}
+</style>
+</head>
+<body>
+<canvas id="hearts"></canvas>
+<div class="toast" id="toast">Zła odpowiedź 😤</div>
+
+<main>
+  <!-- Krok 1: pytanie -->
+  <section class="card pop" id="step1">
+    <h1>Umówisz się ze mną?</h1>
+    <p class="sub">Odpowiedz szczerze 🙈</p>
+    <div class="btns">
+      <button id="yes">Tak</button>
+      <button id="no">Nie</button>
+    </div>
+  </section>
+
+  <!-- Krok 2: kalendarz -->
+  <section class="card pop hidden" id="step2">
+    <h1 style="font-size:2.6rem">Wiedziałem! 🥰</h1>
+    <p class="sub">Wybierz dzień i godzinę naszej randki</p>
+    <div class="calhead">
+      <button class="nav" id="prev" aria-label="Poprzedni miesiąc">‹</button>
+      <b id="month"></b>
+      <button class="nav" id="next" aria-label="Następny miesiąc">›</button>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="times" id="times"></div>
+    <button id="confirm" disabled>Potwierdzam termin 💘</button>
+  </section>
+
+  <!-- Krok 3: koniec -->
+  <section class="card pop hidden" id="step3">
+    <p class="big">Nie mogę się doczekać, buziak 💋</p>
+    <p class="sub" id="summary" style="margin-top:14px"></p>
+    <div id="phoneBox" style="margin-top:26px">
+      <p style="font-weight:700;line-height:1.4">Tyle się znamy, a dalej nie mam Twojego numeru… zadzwonię dziś wieczorem ;))</p>
+      <input id="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="np. 500 600 700"
+        style="margin-top:14px;width:100%;font:inherit;font-size:1.1rem;font-weight:700;text-align:center;padding:14px;border-radius:999px;border:2px solid var(--bg2);background:#fff;color:var(--ink)">
+      <button id="sendPhone" style="margin-top:12px;width:100%;background:var(--red);color:#fff" disabled>Wyślij numer 📞</button>
+    </div>
+    <p class="big hidden" id="phoneThanks" style="font-size:2.2rem;margin-top:20px">Czekaj na telefon 😏📱</p>
+  </section>
+</main>
+
+<script>
+/* ===== USTAW TO ===== */
+const NTFY_TOPIC = "randka-zuzia";
+function notify(title,msg){
+  return fetch('https://ntfy.sh/',{method:'POST',body:JSON.stringify({
+    topic:NTFY_TOPIC,title:title,message:msg,tags:['heart'],priority:5})});
+}
+/* ==================== */
+
+// --- Latające serduszka ---
+const cv=document.getElementById('hearts'),cx=cv.getContext('2d');
+let W,H,hearts=[];
+function size(){W=cv.width=innerWidth*devicePixelRatio;H=cv.height=innerHeight*devicePixelRatio}
+addEventListener('resize',size);size();
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const colors=['#e8164f','#ff4f7b','#ff7aa2','#ffffff','#c2003a'];
+function mk(init){return{x:Math.random()*W,y:init?Math.random()*H:H+40,s:(10+Math.random()*26)*devicePixelRatio,
+  v:(.4+Math.random()*1.4)*devicePixelRatio,w:Math.random()*6.28,ws:.01+Math.random()*.03,
+  r:(Math.random()-.5)*.6,c:colors[Math.random()*colors.length|0],a:.5+Math.random()*.5}}
+for(let i=0;i<(reduce?25:60);i++)hearts.push(mk(true));
+function heart(x,y,s){cx.beginPath();cx.moveTo(x,y+s*.3);
+  cx.bezierCurveTo(x,y,x-s*.5,y,x-s*.5,y+s*.3);cx.bezierCurveTo(x-s*.5,y+s*.6,x,y+s*.8,x,y+s);
+  cx.bezierCurveTo(x,y+s*.8,x+s*.5,y+s*.6,x+s*.5,y+s*.3);cx.bezierCurveTo(x+s*.5,y,x,y,x,y+s*.3);cx.fill()}
+function loop(){cx.clearRect(0,0,W,H);
+  for(const h of hearts){h.y-=reduce?h.v*.3:h.v;h.w+=h.ws;const x=h.x+Math.sin(h.w)*20*devicePixelRatio;
+    cx.save();cx.globalAlpha=h.a;cx.fillStyle=h.c;cx.translate(x,h.y);cx.rotate(h.r+Math.sin(h.w)*.2);heart(0,-h.s/2,h.s);cx.restore();
+    if(h.y<-60)Object.assign(h,mk(false));}
+  requestAnimationFrame(loop)}
+loop();
+
+// --- Uciekający "Nie" ---
+const no=document.getElementById('no'),toast=document.getElementById('toast');
+let tt;
+function runAway(e){
+  e.preventDefault();
+  const r=no.getBoundingClientRect();
+  if(!no.classList.contains('run')){no.style.left=r.left+'px';no.style.top=r.top+'px';no.classList.add('run');no.offsetWidth;}
+  const m=20,x=m+Math.random()*(innerWidth-r.width-2*m),y=m+Math.random()*(innerHeight-r.height-2*m);
+  no.style.left=x+'px';no.style.top=y+'px';
+  toast.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>toast.classList.remove('show'),1400);
+}
+['pointerdown','click','mouseenter','touchstart'].forEach(ev=>no.addEventListener(ev,runAway,{passive:false}));
+no.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' ')runAway(e)});
+
+// --- Tak -> kalendarz ---
+const step1=document.getElementById('step1'),step2=document.getElementById('step2'),step3=document.getElementById('step3');
+const balloonColors=['#e8164f','#ff4f7b','#ff7aa2','#c2003a','#ff9ebb','#ffffff'];
+function launchBalloons(n){
+  for(let i=0;i<n;i++){
+    const s=50+Math.random()*60,c=balloonColors[Math.random()*balloonColors.length|0];
+    const b=document.createElement('div');b.className='balloon';
+    b.style.left=(Math.random()*100)+'vw';b.style.marginLeft=(-s/2)+'px';
+    b.style.setProperty('--d',(2.6+Math.random()*1.8)+'s');
+    b.style.setProperty('--dl',(Math.random()*0.9)+'s');
+    b.style.setProperty('--sd',(1+Math.random()*1.2)+'s');
+    b.innerHTML=`<div class="sw"><svg width="${s}" height="${s*1.9}" viewBox="0 0 100 190">
+      <path d="M50 92 C50 92 6 64 6 34 C6 14 20 4 34 4 C42 4 48 9 50 15 C52 9 58 4 66 4 C80 4 94 14 94 34 C94 64 50 92 50 92Z" fill="${c}" stroke="rgba(90,15,43,.15)" stroke-width="2"/>
+      <ellipse cx="30" cy="26" rx="8" ry="12" fill="#fff" opacity=".45" transform="rotate(-25 30 26)"/>
+      <path d="M46 92 L54 92 L50 99Z" fill="${c}"/>
+      <path d="M50 99 Q40 120 52 140 Q62 160 48 188" fill="none" stroke="#5a0f2b" stroke-width="1.6" opacity=".6"/>
+    </svg></div>`;
+    b.addEventListener('animationend',e=>{if(e.animationName==='rise')b.remove()});
+    document.body.appendChild(b);
+  }
+}
+document.getElementById('yes').onclick=()=>{
+  step1.classList.add('hidden');no.classList.add('hidden');
+  launchBalloons(reduce?10:28);
+  setTimeout(()=>{step2.classList.remove('hidden');render()},1600);
+};
+
+const today=new Date();today.setHours(0,0,0,0);
+let view=new Date(today.getFullYear(),today.getMonth(),1),selDay=null,selTime=null;
+const slots=['17:00','17:30','18:00','18:30','19:00','19:30','20:00','20:30'];
+const grid=document.getElementById('grid'),times=document.getElementById('times'),confirmBtn=document.getElementById('confirm');
+function render(){
+  document.getElementById('month').textContent=view.toLocaleDateString('pl-PL',{month:'long',year:'numeric'});
+  document.getElementById('prev').disabled=view<=new Date(today.getFullYear(),today.getMonth(),1);
+  grid.innerHTML='';
+  ['pn','wt','śr','cz','pt','so','nd'].forEach(d=>grid.insertAdjacentHTML('beforeend',`<div class="dow">${d}</div>`));
+  const off=(view.getDay()+6)%7,dim=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
+  for(let i=0;i<off;i++)grid.insertAdjacentHTML('beforeend','<div></div>');
+  for(let d=1;d<=dim;d++){
+    const dt=new Date(view.getFullYear(),view.getMonth(),d),b=document.createElement('button');
+    b.className='day';b.textContent=d;b.disabled=dt<today;
+    if(selDay&&dt.getTime()===selDay.getTime())b.classList.add('sel');
+    b.onclick=()=>{selDay=dt;render()};grid.appendChild(b);
+  }
+  times.innerHTML='';
+  if(selDay)slots.forEach(t=>{const b=document.createElement('button');b.className='time'+(t===selTime?' sel':'');b.textContent=t;
+    b.onclick=()=>{selTime=t;render()};times.appendChild(b)});
+  confirmBtn.disabled=!(selDay&&selTime);
+}
+document.getElementById('prev').onclick=()=>{view.setMonth(view.getMonth()-1);render()};
+document.getElementById('next').onclick=()=>{view.setMonth(view.getMonth()+1);render()};
+
+// --- Potwierdzenie + powiadomienie na telefon (ntfy.sh) ---
+confirmBtn.onclick=async()=>{
+  const when=selDay.toLocaleDateString('pl-PL',{weekday:'long',day:'numeric',month:'long'})+', '+selTime;
+  step2.classList.add('hidden');step3.classList.remove('hidden');
+  document.getElementById('summary').textContent='Widzimy się: '+when;
+  for(let i=0;i<40;i++)hearts.push(mk(false));
+  try{
+    await notify('💘 Ona powiedziała TAK!','Wybrany termin randki: '+when);
+  }catch(e){console.warn('Nie udało się wysłać powiadomienia',e)}
+};
+
+// --- Numer telefonu ---
+const phone=document.getElementById('phone'),sendPhone=document.getElementById('sendPhone');
+phone.addEventListener('input',()=>{sendPhone.disabled=phone.value.replace(/\D/g,'').length<9});
+sendPhone.onclick=async()=>{
+  const num=phone.value.trim();
+  document.getElementById('phoneBox').classList.add('hidden');
+  document.getElementById('phoneThanks').classList.remove('hidden');
+  launchBalloons(reduce?6:14);
+  try{
+    await notify('📞 Masz jej numer!','Numer: '+num);
+  }catch(e){console.warn('Nie udało się wysłać numeru',e)}
+};
+</script>
+</body>
+</html>
